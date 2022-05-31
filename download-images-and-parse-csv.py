@@ -2,9 +2,12 @@ import csv
 import requests
 
 
+
 # Extracting CSV rows
 import json
 import os
+
+print('Starting CSV parse')
 
 csv_rows = []
 with open('assets/gvlab_swow_split.csv', 'r') as file:
@@ -19,8 +22,11 @@ csv_rows = csv_rows[1:]
 data = list(map(lambda row: {"id": row[0], 'cue': row[1], 'candidates': json.loads(row[6]), 'associations': json.loads(row[2])}, csv_rows))
 json.dump(data, open( './assets/data.json', 'w+'), indent=4)
 
+print('CSV parse finished')
 
 # Download all images
+print('Starting image download')
+
 images = set()
 for association in data:
     images = images.union(set(association['candidates']))
@@ -43,4 +49,4 @@ for index, image in enumerate(images):
     if (index+1) % 5 == 0:
         print(str(index+1) + ' images downloaded')
 
-print('Download finished')
+print('Image download finished')
