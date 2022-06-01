@@ -9,7 +9,7 @@ device = "cuda" # if torch.cuda.is_available() else "cpu"
 class BackendModel:
 
     def __init__(self):
-        self.clip_version = 'RN50' # 1 x 1024
+        self.clip_version = 'ViT-B/32' # 1 x 1024
         self.model, self.preprocess = clip.load(self.clip_version, device=device)
         self.images_directory = os.path.join('/'.join(os.path.dirname(__file__).split('/')[:-1]), 'assets/images')
         image_vector = self.load_and_encode_img('acid.jpg')
