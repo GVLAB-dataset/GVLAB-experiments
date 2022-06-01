@@ -11,11 +11,8 @@ class BaselineModel(nn.Module):
         self.backend_model = backend_model
         embed_dim = backend_model.get_embed_dim()
 
-        if args.model_description == 'arithmetics':
-            linear_layer_images = 2
+        linear_layer_images = 2
 
-        else:
-            linear_layer_images = 4
         pair_embed_dim = linear_layer_images * embed_dim
         self.model_description = args.model_description
         self.multihead_attn = nn.MultiheadAttention(embed_dim, 3)

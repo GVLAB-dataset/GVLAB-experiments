@@ -5,7 +5,7 @@ import numpy as np
 import os
 import pandas as pd
 import pickle
-from config import TRAIN, TEST, DEV, SPLIT_PATH, GOLD_PATH_DIR
+from vasr_config import TRAIN, TEST, DEV, SPLIT_PATH, GOLD_PATH_DIR
 
 # ------------------------------Constants--------------------------------
 
