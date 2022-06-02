@@ -6,10 +6,10 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
-from utills import get_split
+from vasr_utills import get_split
 import argparse
 import os
-from utills import save_model, dump_test_info, dump_train_info, calculate_accuracy
+from vasr_utills import save_model, dump_test_info, dump_train_info, calculate_accuracy
 from vasr_config import TRAIN, DEV, TRAIN_RESULTS_PATH, TEST, FEW_SHOT_DATA_SAMPLES, MODELS_MAP
 from models.vasr_backend import BackendModel
 from models.vasr_trainable import BaselineModel
@@ -109,7 +109,7 @@ def test(backend_model, baseline_model, data, loss_fn):
     ----------
     backend_model : BackendModel is the feature extraction model (e.g., VIT)
     baseline_model :(nn.Module) The baseline model
-    data :(dict) contains the train, dev and test data
+    data :(dict) contains the train, dev and test splits
     loss_fn : Loss function
 
     """
@@ -133,7 +133,7 @@ def train(backend_model, baseline_model, data, loss_fn):
     ----------
     backend_model : BackendModel is the feature extraction model (e.g., VIT)
     baseline_model :(nn.Module) The baseline model
-    data :(dict) contains the train, dev and test data
+    data :(dict) contains the train, dev and test splits
     loss_fn : Loss function
 
     """

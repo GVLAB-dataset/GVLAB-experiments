@@ -7,10 +7,12 @@ import requests
 import json
 import os
 
+from config import SWOW_DATA_PATH
+
 print('Starting CSV parse')
 
 csv_rows = []
-with open('assets/gvlab_swow_split.csv', 'r') as file:
+with open(SWOW_DATA_PATH, 'r') as file:
     reader = csv.reader(file)
     for row in reader:
         csv_rows.append(row)
@@ -18,13 +20,8 @@ with open('assets/gvlab_swow_split.csv', 'r') as file:
 csv_rows = csv_rows[1:]
 
 
-# Parse CSV data and save to JSON file
-data = list(map(lambda row: {"id": row[0], 'cue': row[1], 'candidates': json.loads(row[6]), 'associations': json.loads(row[2])}, csv_rows))
-json.dump(data, open( './assets/data.json', 'w+'), indent=4)
-
-print('CSV parse finished')
-
 # Download all images
+data = list(map(lambda row: {"id": row[0], 'cue': row[1], 'candidates': json.loads(row[6]), 'associations': json.loads(row[2])}, csv_rows))
 print('Starting image download')
 
 images = set()

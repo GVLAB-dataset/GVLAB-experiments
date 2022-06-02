@@ -30,7 +30,7 @@ MODELS_MAP = {
 
 IMSITU_PATH = '/Users/eliyahustrugo/PycharmProjects/image_analogies/imsitu_data'
 IMAGES_PATH = '/Users/eliyahustrugo/PycharmProjects/image_analogies/imsitu_data/images_512'
-SWIG_PREDICTIONS = '/Users/eliyahustrugo/PycharmProjects/image_analogies/imsitu_data/analogies_outputs/data/GSR_pred_parsed_results.json'
+SWIG_PREDICTIONS = '/Users/eliyahustrugo/PycharmProjects/image_analogies/imsitu_data/analogies_outputs/splits/GSR_pred_parsed_results.json'
 
 SOURCE = '/Users/eliyahustrugo/PycharmProjects/vasr/experiments'
 SPLIT_PATH = os.path.join(SOURCE, 'date_split')
