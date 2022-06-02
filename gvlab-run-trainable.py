@@ -21,7 +21,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-lr', '--lr', help='learning rate', default=0.001, type=float)
-    parser.add_argument('-bz', '--batch_size', default=1, type=int)
+    parser.add_argument('-bz', '--batch_size', default=128, type=int)
     parser.add_argument('-ne', '--n_epochs', default=3, type=int)
     parser.add_argument('-s', '--split', default='train') # Train, Dev, Test.
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
@@ -63,7 +63,8 @@ def main(args):
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
     if args.multi_gpu:
         baseline_model = nn.DataParallel(baseline_model)
-    loss_fn = torch.nn.CrossEntropyLoss()
+    class_weights = torch.FloatTensor([4.0]).to(device)
+    loss_fn = torch.nn.BCEWithLogitsLoss(weight=class_weights)
 
     if args.test_model is False:
         train(backend_model, baseline_model, data, loss_fn)
@@ -139,13 +140,14 @@ def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
 
             # Forward pass
             input_img, input_text, label = batch_data
+            label = label.to(torch.device(input_text.device))
             out = model(input_img, input_text).squeeze()
 
             y = label.squeeze() # Is this vector ?
             optimizer.zero_grad()
 
             # Compute Loss
-            loss = loss_fn(out, y)
+            loss = loss_fn(out.to(torch.float), y.to(torch.float))
             epoch_train_losses.append(loss.item())
             # Backward pass
             loss.backward()

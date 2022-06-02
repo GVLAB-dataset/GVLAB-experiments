@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import tensorflow as tf
 
 from models.gvlab_backend import BackendModel
 
@@ -18,9 +19,11 @@ class BaselineModel(nn.Module):
         )
 
     def forward(self, input_image_vector, text_vector):
+        concatenated = []
+        for i in range(len(input_image_vector)):
+                concatenated.append(torch.cat([input_image_vector[i], text_vector[i]], dim=1).to(torch.float32))
 
-        x = torch.cat([input_image_vector[0], text_vector[0]], dim=1) # what to do here ?
-
+        x = torch.cat(concatenated)
         x = self.classifier(x)
         return x
 
