@@ -1,18 +1,20 @@
 import argparse
 import json
 import os
-
+import pickle
+import pandas as pd
+import numpy as np
 import torch
 from torch import nn
 torch.autograd.set_detect_anomaly(True)
 
-from config import TRAIN, TRAIN_RESULTS_PATH, MODEL_RESULTS_PATH
+from config import TRAIN, TRAIN_RESULTS_PATH, MODEL_RESULTS_PATH, DEV, TEST
 from models.gvlab_backend import BackendModel
 from models.gvlab_trainable import BaselineModel
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from utils import save_model, dump_train_info, get_split
+from utils import save_model, dump_train_info, get_gvlab_data
 
 device_ids = [0, 1, 2, 3]
 
@@ -44,22 +46,199 @@ def get_args():
 
 
 class Loader(Dataset):
-    def __init__(self, data, backend_model):
+    def __init__(self, data, backend_model, is_train=True):
         self.data = data
         self.backend_model = backend_model
+        self.is_train = is_train
 
     def __getitem__(self, index):
-        row = self.data[index]
-        input_image_vector = self.backend_model.load_and_encode_img(row['image'])
-        text_vector = self.backend_model.encode_text(row['cue'])
+        # if train, ...
+        # else, ...
+        # row = self.data.iloc[index]
+        # text_vector = self.backend_model.encode_text(row['cue'])
+        #
+        # if is_train:
+        #     all_row_items = []
+        #     for cand in row['candidates']:
+        #         if cand in row['associations']:
+        #             label = 1
+        #         else:
+        #             label = 0
+        #         input_image_vector = self.backend_model.load_and_encode_img(cand + ".jpg")
+        #         all_row_items.append((input_image_vector, text_vector, label))
+        #     return all_row_items
+        # else:
+        #     raise Exception(f'Not implemented yet')
 
-        return input_image_vector, text_vector, row['label']
+        if self.is_train:
+            row = self.data[index]
+            text_vector = self.backend_model.encode_text(row['cue'])
+            input_image_vector = self.backend_model.load_and_encode_img(row['image'])
+            return input_image_vector, text_vector, row['label']
+        else:
+            row = self.data.iloc[index]
+            text_vector = self.backend_model.encode_text(row['cue'])
+            all_labels = []
+            options_candidates = []
+            for cand in row['candidates']:
+                if cand in row['associations']:
+                    label = 1
+                else:
+                    label = 0
+                input_image_vector = self.backend_model.load_and_encode_img(cand + ".jpg")
+                options_candidates.append(input_image_vector)
+                all_labels.append(label)
+            for i in range(12 - len(options_candidates)):
+                options_candidates.append(torch.zeros(1,512))
+                all_labels.append(-1)
+            return text_vector, torch.cat(options_candidates), np.array(all_labels), row['num_associations']
 
     def __len__(self):
         return len(self.data)
 
+
+def test(backend_model, baseline_model, data, loss_fn):
+    """
+    Defines the parameters for the test loop and runs it
+
+    Parameters
+    ----------
+    backend_model : BackendModel is the feature extraction model (e.g., VIT)
+    baseline_model :(nn.Module) The baseline model
+    data :(dict) contains the train, dev and test data
+    loss_fn : Loss function
+
+    """
+    print('*** testing ***')
+    test_dataset = Loader(data[TEST], backend_model, is_train=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size)
+    model_dir_path = get_experiment_dir(args)
+    model_path = os.path.join(model_dir_path, f'epoch_{args.load_epoch}.pth')
+    print(f"Loading model (epoch_{args.load_epoch}) from {model_path}")
+    # assert os.path.exists(model_path)
+    # baseline_model.load_state_dict(torch.load(model_path))
+    baseline_model = baseline_model.eval()
+    test_loop(args=args, model=baseline_model, test_loader=test_loader, loss_fn=loss_fn, test_df=data[TEST])
+
+def test_loop(args, model, test_loader, loss_fn, test_df):
+    """
+    Runs the test loop on the given test set
+    Parameters
+    ----------
+    args :  (argparse.Namespace) arguments
+    model :(nn.Module) The baseline model
+    test_loader :(DataLoader)
+    loss_fn : Loss function
+    test_df : (DataFrame) contain information the test set
+
+    """
+    all_losses = {TEST: []}
+    all_test_accuracy = []
+    model_dir_path = get_experiment_dir(args)
+
+    epoch_test_losses, epoch_test_accuracy, predictions, labels = test_epoch(model, test_loader, args.load_epoch)
+    all_losses[TEST].append(epoch_test_losses)
+    all_test_accuracy.append(epoch_test_accuracy)
+
+    test_df['predictions'] = predictions
+    test_df['labels'] = labels
+
+    dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df, epoch=args.load_epoch)
+
+
+def test_epoch(model, dev_loader, epoch):
+    """
+    Tests the model on a single epoch using the given dev_loader
+
+    Parameters
+    ----------
+    loss_fn : Loss function
+    model : (nn.Module) The baseline model
+    dev_loader : (DataLoader)
+    epoch : (int) epoch number
+
+    Returns
+    -------
+    The epoch: losses,accuracy,model's prediction, labels
+
+    """
+
+    model.eval()
+    epoch_dev_losses = []
+    epoch_dev_accuracy = []
+    all_predictions = []
+    all_labels = []
+
+    for batch_idx, batch_data in tqdm(enumerate(dev_loader), total=len(dev_loader), desc=f'Testing epoch {epoch}...'):
+
+        with torch.no_grad():
+            all_batch_scores = []
+            input_cue, options_candidates, label_associations, num_associations = batch_data
+            for item_in_batch, label_in_batch, input_cue_in_batch in zip(options_candidates, label_associations, input_cue):
+                batch_scores = []
+                for option, label in zip(item_in_batch, label_in_batch):
+                    if label.item() != -1:
+                        out = model(input_cue_in_batch, option.unsqueeze(0)).squeeze()
+                        batch_scores.append(out)
+                all_batch_scores.append(torch.stack(batch_scores))
+
+        y = label_associations.squeeze()
+
+        if args.debug:
+            if batch_idx > 5:
+                break
+        # loss = loss_fn(out, y)
+        accuracy, predictions, labels = calculate_accuracy_test(all_batch_scores, y, num_associations)
+        # epoch_dev_losses.append(loss.item())
+        epoch_dev_accuracy.append(accuracy)
+        all_predictions += predictions
+        all_labels += labels
+
+    return epoch_dev_losses, epoch_dev_accuracy, all_predictions, all_labels
+
+
+def calculate_accuracy_test(pred_batch, label_batch, num_associations_batch):
+
+    batch_jaccard = []
+    batch_preds = []
+    batch_labels = []
+    for pred, label, num_associations in zip(pred_batch, label_batch, num_associations_batch):
+        top_k_preds_ind = np.argpartition(pred.numpy(), -num_associations)[-num_associations:]
+        real_label = label.numpy()[np.where(label.numpy() != -1)]
+        labels_indices = np.where(real_label == 1)[0]
+        union = set(top_k_preds_ind).union(set(labels_indices))
+        intersection = set(top_k_preds_ind).intersection(set(union))
+        jaccard = len(intersection) / len(union)
+        batch_jaccard.append(jaccard)
+        batch_preds.append(top_k_preds_ind)
+        batch_labels.append(batch_labels)
+
+    return batch_jaccard, batch_preds, batch_labels
+
+
+def dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df, epoch):
+    test_losses_mean = {i: np.mean(v) for i, v in enumerate(all_losses['test'])}
+    test_accuracy_mean = {i: np.mean(v) for i, v in enumerate(all_test_accuracy)}
+    test_info = pd.concat(
+        [pd.Series(test_losses_mean, name='test loss'), pd.Series(test_accuracy_mean, name='test accuracy')], axis=1)
+    out_p = os.path.join(model_dir_path, f'epoch_{epoch}_test')
+    if args.result_suffix != '':
+        out_p += "_" + args.result_suffix
+    all_losses_out_p = out_p + '_all_losses_test.pickle'
+    out_p_test_df = out_p + "_test_df.csv"
+    out_p += ".csv"
+    test_info.to_csv(out_p)
+    test_df.to_csv(out_p_test_df)
+    all_losses_and_acc_d = {'all_losses': all_losses, 'all_test_accuracy': all_test_accuracy}
+    with open(all_losses_out_p, 'wb') as f:
+        pickle.dump(all_losses_and_acc_d, f)
+    print(f'Dumping losses {len(test_info)} to {all_losses_out_p}')
+    print(test_info)
+    print(f'Dumping df {len(test_info)} to {out_p}, and {len(test_df)} to {out_p_test_df}')
+
+
 def main(args):
-    data = get_split(args.split)
+    splits = get_gvlab_data(args.split)
     backend_model = BackendModel()
     baseline_model = BaselineModel(backend_model).to(device)
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
@@ -70,7 +249,11 @@ def main(args):
     loss_fn = torch.nn.BCEWithLogitsLoss()
 
     if args.test_model is False:
-        train(backend_model, baseline_model, data, loss_fn)
+        train(backend_model, baseline_model, splits, loss_fn)
+    else:
+        # train(backend_model, baseline_model, splits, loss_fn)
+        # args.test_model = True
+        test(backend_model, baseline_model, splits, loss_fn)
 
 
 def get_experiment_dir(args):
@@ -88,15 +271,17 @@ def get_experiment_dir(args):
     json.dump(args.__dict__, open(os.path.join(model_dir_path, 'args.json'), 'w'))
     return model_dir_path
 
-def train(backend_model, baseline_model, data, loss_fn):
+def train(backend_model, baseline_model, splits, loss_fn):
     optimizer = torch.optim.Adam(baseline_model.parameters(), lr=args.lr)
-    train_dataset = Loader(data, backend_model)
+    train_dataset = Loader(splits['train'], backend_model)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size)
-    train_loop(args=args, model=baseline_model, optimizer=optimizer, train_loader=train_loader, loss_fn=loss_fn,
+    dev_dataset = Loader(splits['dev'], backend_model, is_train=False)
+    dev_loader = DataLoader(dev_dataset, batch_size=args.batch_size)
+    train_loop(args=args, model=baseline_model, optimizer=optimizer, train_loader=train_loader, dev_loader=dev_loader, loss_fn=loss_fn,
                n_epoch=args.n_epochs)
 
 
-def train_loop(args, model, optimizer, train_loader, loss_fn, n_epoch):
+def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoch):
     """
     Parameters
     ----------
@@ -107,13 +292,17 @@ def train_loop(args, model, optimizer, train_loader, loss_fn, n_epoch):
     loss_fn : Loss function
     n_epoch :(int) epoch number
     """
-    all_losses = {TRAIN: []}
+    all_losses = {TRAIN: [], DEV: []}
+    all_dev_accuracy = []
     model_dir_path = get_experiment_dir(args)
     print(f"model_dir_path: {model_dir_path}")
 
     for epoch in tqdm(range(n_epoch)):
         epoch_train_losses = train_epoch(loss_fn, model, optimizer, train_loader, epoch)
+        epoch_dev_losses, epoch_dev_accuracy, _, _ = test_epoch(model, dev_loader, epoch)
         all_losses[TRAIN].append(epoch_train_losses)
+        all_losses[DEV].append(epoch_dev_losses)
+        all_dev_accuracy.append(epoch_dev_accuracy)
 
         dev_accuracy_list = dump_train_info(args, model_dir_path, all_losses, epoch=epoch)
         save_model(model_dir_path, epoch, model, dev_accuracy_list)

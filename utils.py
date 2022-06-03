@@ -72,7 +72,12 @@ def dump_train_info(args, model_dir_path, all_losses, epoch):
 
 
 
-def get_split(args):
+def get_gvlab_data(args):
     f = open(SWOW_SPLIT_PATH)
-    split = json.load(f)
-    return split
+    train = json.load(f)
+    df = pd.read_csv('assets/gvlab_swow_split.csv')
+    df['candidates'] = df['candidates'].apply(json.loads)
+    df['associations'] = df['associations'].apply(json.loads)
+    dev, test = df.iloc[800:900], df.iloc[900:]
+    splits = {'train': train, 'dev': dev, 'test': test}
+    return splits

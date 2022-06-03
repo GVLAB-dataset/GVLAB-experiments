@@ -20,7 +20,9 @@ class BaselineModel(nn.Module):
     def forward(self, input_image_vector, text_vector):
         concatenated = []
         for i in range(len(input_image_vector)):
-            concatenated.append(torch.cat([input_image_vector[i], text_vector[i]], dim=1))
+            input_concat = torch.cat([input_image_vector[i], text_vector[i]])
+            # input_concat = torch.cat([input_image_vector[i], text_vector[i]], dim=1)
+            concatenated.append(input_concat)
 
         x = torch.cat(concatenated)
         x = self.classifier(x)

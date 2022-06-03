@@ -22,13 +22,13 @@ class BackendModel:
         img_rgb = Image.open(img_path).convert('RGB')
         clip_image = self.preprocess(img_rgb).unsqueeze(0).to(device)
         clip_image_feats = self.model.encode_image(clip_image)
-        clip_image_feats_normalized = clip_image_feats.norm(dim=-1, keepdim=True)
+        clip_image_feats_normalized = clip_image_feats / clip_image_feats.norm(dim=-1, keepdim=True)
         return clip_image_feats_normalized
 
     def encode_text(self, text):
         clip_text = self.get_clip_txt(text)
         cue_clip_txt_encoded = self.model.encode_text(clip_text)
-        cue_clip_txt_encoded_normalized = cue_clip_txt_encoded.norm(dim=-1, keepdim=True)
+        cue_clip_txt_encoded_normalized = cue_clip_txt_encoded / cue_clip_txt_encoded.norm(dim=-1, keepdim=True)
         return cue_clip_txt_encoded_normalized
 
     def get_clip_txt(self, text):
