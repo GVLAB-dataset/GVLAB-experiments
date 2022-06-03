@@ -52,24 +52,6 @@ class Loader(Dataset):
         self.is_train = is_train
 
     def __getitem__(self, index):
-        # if train, ...
-        # else, ...
-        # row = self.data.iloc[index]
-        # text_vector = self.backend_model.encode_text(row['cue'])
-        #
-        # if is_train:
-        #     all_row_items = []
-        #     for cand in row['candidates']:
-        #         if cand in row['associations']:
-        #             label = 1
-        #         else:
-        #             label = 0
-        #         input_image_vector = self.backend_model.load_and_encode_img(cand + ".jpg")
-        #         all_row_items.append((input_image_vector, text_vector, label))
-        #     return all_row_items
-        # else:
-        #     raise Exception(f'Not implemented yet')
-
         if self.is_train:
             row = self.data[index]
             text_vector = self.backend_model.encode_text(row['cue'])
@@ -89,7 +71,7 @@ class Loader(Dataset):
                 options_candidates.append(input_image_vector)
                 all_labels.append(label)
             for i in range(12 - len(options_candidates)):
-                options_candidates.append(torch.zeros(1,512))
+                options_candidates.append(torch.zeros(1, 512).to(device))
                 all_labels.append(-1)
             return text_vector, torch.cat(options_candidates), np.array(all_labels), row['num_associations']
 
@@ -176,13 +158,20 @@ def test_epoch(model, dev_loader, epoch):
             input_cue, options_candidates, label_associations, num_associations = batch_data
             for item_in_batch, label_in_batch, input_cue_in_batch in zip(options_candidates, label_associations, input_cue):
                 batch_scores = []
+
+                inflated_input_cue = []
+                option_input = []
+
                 for option, label in zip(item_in_batch, label_in_batch):
                     if label.item() != -1:
-                        out = model(input_cue_in_batch, option.unsqueeze(0)).squeeze()
-                        batch_scores.append(out)
+                        inflated_input_cue.append(input_cue_in_batch.unsqueeze(0))
+                        option_input.append(option.unsqueeze(0).unsqueeze(0))
+
+                out = model(torch.cat(option_input), torch.cat(inflated_input_cue)).squeeze()
+                batch_scores.append(out)
                 all_batch_scores.append(torch.stack(batch_scores))
 
-        y = label_associations.squeeze()
+        y = label_associations.squeeze().to(device)
 
         if args.debug:
             if batch_idx > 5:
@@ -203,7 +192,11 @@ def calculate_accuracy_test(pred_batch, label_batch, num_associations_batch):
     batch_preds = []
     batch_labels = []
     for pred, label, num_associations in zip(pred_batch, label_batch, num_associations_batch):
-        top_k_preds_ind = np.argpartition(pred.numpy(), -num_associations)[-num_associations:]
+
+        label = label.cpu()
+        pred = pred.cpu()
+
+        top_k_preds_ind = np.argpartition(pred.numpy(), -num_associations)[0][-num_associations:]
         real_label = label.numpy()[np.where(label.numpy() != -1)]
         labels_indices = np.where(real_label == 1)[0]
         union = set(top_k_preds_ind).union(set(labels_indices))
@@ -211,7 +204,7 @@ def calculate_accuracy_test(pred_batch, label_batch, num_associations_batch):
         jaccard = len(intersection) / len(union)
         batch_jaccard.append(jaccard)
         batch_preds.append(top_k_preds_ind)
-        batch_labels.append(batch_labels)
+        batch_labels.append(labels_indices)
 
     return batch_jaccard, batch_preds, batch_labels
 
