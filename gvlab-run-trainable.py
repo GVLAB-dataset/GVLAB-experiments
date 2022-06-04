@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('-bz', '--batch_size', default=128, type=int)
     # parser.add_argument('-bz', '--batch_size', default=4, type=int)
     parser.add_argument('-ne', '--n_epochs', default=10, type=int)
-    parser.add_argument('-s', '--split', default='train') # Train, Dev, Test.
+    parser.add_argument('-s', '--split', default='train')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
     parser.add_argument("--debug", action='store_const', default=False, const=True)
     parser.add_argument("--multi_gpu", action='store_const', default=False, const=True)
