@@ -19,30 +19,27 @@ from utils import save_model, dump_train_info, get_gvlab_data
 device_ids = [0, 1, 2, 3]
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-
+print(f"device: {device}")
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-lr', '--lr', help='learning rate', default=0.001, type=float)
     # parser.add_argument('-bz', '--batch_size', default=128, type=int)
-    parser.add_argument('-bz', '--batch_size', default=4, type=int)
+    parser.add_argument('-bz', '--batch_size', default=32, type=int)
+    # parser.add_argument('-bz', '--batch_size', default=4, type=int)
     parser.add_argument('-ne', '--n_epochs', default=10, type=int)
     parser.add_argument('--dev_test_sample', default=0.1, type=int)
     parser.add_argument('-s', '--split', default='gvlab_swow_split')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
     parser.add_argument("--debug", action='store_const', default=False, const=True)
-    parser.add_argument("--multi_gpu", action='store_const', default=False, const=True)
     parser.add_argument("--test_model", action='store_const', default=False, const=True)
     parser.add_argument('--load_epoch', default=1)
-    parser.add_argument('--model_backend_type', default='vit', help="vit", required=False)
-    parser.add_argument('--backend_version', default='1.0.0', help="version", required=False)
+    parser.add_argument('--model_backend_type', default='ViT-B/32', help="CLIP backend type", required=False)
+    parser.add_argument('--model_version', default='1.0.0', help="version", required=False)
     args = parser.parse_args()
-
-    if args.multi_gpu:
-        print(f"Multiplying batch_size by # GPUs: {len(device_ids)}")
-        initial_batch_size = args.batch_size
-        args.batch_size *= len(device_ids)
-        print(f"initial_batch_size: {initial_batch_size}, new batch_size: {args.batch_size}")
+    print(args)
+    if args.debug:
+        print(f"*** DEBUG ***")
     return args
 
 
@@ -233,11 +230,10 @@ def dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df,
 
 def main(args):
     splits = get_gvlab_data(args)
-    backend_model = BackendModel()
+    backend_model = BackendModel(args.model_backend_type)
     baseline_model = BaselineModel(backend_model).to(device)
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
-    if args.multi_gpu:
-        baseline_model = nn.DataParallel(baseline_model)
+
     loss_fn = torch.nn.BCEWithLogitsLoss()
 
     if args.test_model is False:
@@ -254,7 +250,7 @@ def get_experiment_dir(args):
     if not os.path.exists(TRAIN_RESULTS_PATH):
         os.makedirs(TRAIN_RESULTS_PATH)
 
-    model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type}_{args.backend_version.replace('/', '-')}_{args.split}")
+    model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type.replace('/','-')}_{args.model_version.replace('/', '-')}_{args.split}")
 
     if args.debug:
         model_dir_path += "_DEBUG"
@@ -336,6 +332,10 @@ def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
             # Backward pass
             loss.backward()
             optimizer.step()
+
+            if args.debug:
+                if batch_idx > 5:
+                    break
 
     return epoch_train_losses
 

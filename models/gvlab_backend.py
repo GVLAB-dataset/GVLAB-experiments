@@ -10,8 +10,9 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class BackendModel:
 
-    def __init__(self):
-        self.clip_version = 'ViT-B/32' # 1 x 512
+    def __init__(self, backend_version):
+        print(f"Creating CLIP {backend_version} model")
+        self.clip_version = backend_version # 1 x 512
         self.model, self.preprocess = clip.load(self.clip_version, device=device)
         self.images_directory = IMAGES_FOLDER_PATH
         self.image_dim = self.load_and_encode_img('acid.jpg').shape[1]
@@ -41,4 +42,3 @@ class BackendModel:
         clip_txt_tokenized = clip.tokenize([clip_txt]).to(device)
         return clip_txt_tokenized
 
-BackendModel()
