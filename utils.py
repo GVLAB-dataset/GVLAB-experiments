@@ -73,11 +73,25 @@ def dump_train_info(args, model_dir_path, all_losses, epoch):
 
 
 def get_gvlab_data(args):
-    f = open(SWOW_SPLIT_PATH)
+    f = open(f"assets/{args.split}.json")
     train = json.load(f)
-    df = pd.read_csv('assets/gvlab_swow_split.csv')
+    df = pd.read_csv(f'assets/gvlab_{args.split}.csv')
     df['candidates'] = df['candidates'].apply(json.loads)
     df['associations'] = df['associations'].apply(json.loads)
-    dev, test = df.iloc[800:900], df.iloc[900:]
+    # args.dev_test_sample = 0.1
+    items_in_test_dev = int(len(df) * args.dev_test_sample)
+    test = df.sample(items_in_test_dev)
+    df = df[~df['ID'].isin(test['ID'])]
+    dev = df.sample(items_in_test_dev)
+    excluded_ids = set(test['ID'].values).union(set(dev['ID'].values))
+    train = [x for x in train if x['ID'] not in excluded_ids]
+    test_unique_ids = set(test['ID'])
+    dev_unique_ids = set(dev['ID'])
+    train_unique_ids = set([x['ID'] for x in train])
+    assert len(test_unique_ids & dev_unique_ids & train_unique_ids) == 0
+    print(f"train: {len(train)}, # {len(train_unique_ids)} unique IDs")
+    print(f"dev: {len(dev)}, # {len(dev_unique_ids)} unique IDs")
+    print(f"test: {len(test)}, # {len(test_unique_ids)} unique IDs")
+
     splits = {'train': train, 'dev': dev, 'test': test}
     return splits

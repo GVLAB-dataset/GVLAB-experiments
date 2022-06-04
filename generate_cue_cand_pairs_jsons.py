@@ -25,10 +25,10 @@ def prepare_split(input_csv, output_json):
     def get_row_id(image, cue):
         return image + '-' + cue
 
-    def insert_row(image, cue, label, association_index):
+    def insert_row(image, cue, label, ID):
         id = get_row_id(image, cue)
         if id not in cache:
-            split_rows.append({'image': image + '.jpg', 'cue': cue, 'label': label, 'association_index': association_index})
+            split_rows.append({'image': image + '.jpg', 'cue': cue, 'label': label, 'ID': ID})
             cache.add(id)
 
     for row in data:

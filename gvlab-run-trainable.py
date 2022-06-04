@@ -24,10 +24,11 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-lr', '--lr', help='learning rate', default=0.001, type=float)
-    parser.add_argument('-bz', '--batch_size', default=128, type=int)
-    # parser.add_argument('-bz', '--batch_size', default=4, type=int)
+    # parser.add_argument('-bz', '--batch_size', default=128, type=int)
+    parser.add_argument('-bz', '--batch_size', default=4, type=int)
     parser.add_argument('-ne', '--n_epochs', default=10, type=int)
-    parser.add_argument('-s', '--split', default='train')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
+    parser.add_argument('--dev_test_sample', default=0.1, type=int)
+    parser.add_argument('-s', '--split', default='gvlab_swow_split')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
     parser.add_argument("--debug", action='store_const', default=False, const=True)
     parser.add_argument("--multi_gpu", action='store_const', default=False, const=True)
@@ -79,7 +80,7 @@ class Loader(Dataset):
         return len(self.data)
 
 
-def test(backend_model, baseline_model, data, loss_fn):
+def test(backend_model, baseline_model, data):
     """
     Defines the parameters for the test loop and runs it
 
@@ -97,12 +98,12 @@ def test(backend_model, baseline_model, data, loss_fn):
     model_dir_path = get_experiment_dir(args)
     model_path = os.path.join(model_dir_path, f'epoch_{args.load_epoch}.pth')
     print(f"Loading model (epoch_{args.load_epoch}) from {model_path}")
-    assert os.path.exists(model_path)
-    baseline_model.load_state_dict(torch.load(model_path))
+    # assert os.path.exists(model_path)
+    # baseline_model.load_state_dict(torch.load(model_path))
     baseline_model = baseline_model.eval()
-    test_loop(args=args, model=baseline_model, test_loader=test_loader, loss_fn=loss_fn, test_df=data[TEST])
+    test_loop(args=args, model=baseline_model, test_loader=test_loader, test_df=data[TEST])
 
-def test_loop(args, model, test_loader, loss_fn, test_df):
+def test_loop(args, model, test_loader, test_df):
     """
     Runs the test loop on the given test set
     Parameters
@@ -231,7 +232,7 @@ def dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df,
 
 
 def main(args):
-    splits = get_gvlab_data(args.split)
+    splits = get_gvlab_data(args)
     backend_model = BackendModel()
     baseline_model = BaselineModel(backend_model).to(device)
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
@@ -242,9 +243,9 @@ def main(args):
     if args.test_model is False:
         train(backend_model, baseline_model, splits, loss_fn)
     else:
-        train(backend_model, baseline_model, splits, loss_fn)
-        args.test_model = True
-        test(backend_model, baseline_model, splits, loss_fn)
+        # train(backend_model, baseline_model, splits, loss_fn)
+        # args.test_model = True
+        test(backend_model, baseline_model, splits)
 
 
 def get_experiment_dir(args):
