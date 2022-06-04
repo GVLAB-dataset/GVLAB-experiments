@@ -243,8 +243,8 @@ def main(args):
     if args.test_model is False:
         train(backend_model, baseline_model, splits, loss_fn)
     else:
-        # train(backend_model, baseline_model, splits, loss_fn)
-        # args.test_model = True
+        train(backend_model, baseline_model, splits, loss_fn)
+        args.test_model = True
         test(backend_model, baseline_model, splits)
 
 
