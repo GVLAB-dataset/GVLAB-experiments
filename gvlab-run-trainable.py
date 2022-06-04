@@ -237,15 +237,13 @@ def main(args):
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
     if args.multi_gpu:
         baseline_model = nn.DataParallel(baseline_model)
-    # class_weights = torch.FloatTensor([4.0]).to(device)
-    # loss_fn = torch.nn.BCEWithLogitsLoss(weight=class_weights)
     loss_fn = torch.nn.BCEWithLogitsLoss()
 
     if args.test_model is False:
         train(backend_model, baseline_model, splits, loss_fn)
     else:
-        # train(backend_model, baseline_model, splits, loss_fn)
-        # args.test_model = True
+        train(backend_model, baseline_model, splits, loss_fn)
+        args.test_model = True
         test(backend_model, baseline_model, splits, loss_fn)
 
 
