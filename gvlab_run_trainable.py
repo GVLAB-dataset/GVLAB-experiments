@@ -292,7 +292,7 @@ def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoc
         all_losses[DEV].append(epoch_dev_losses)
         all_dev_accuracy.append(epoch_dev_accuracy)
 
-        dev_accuracy_list = dump_train_info(args, model_dir_path, all_losses, epoch=epoch)
+        dev_accuracy_list = dump_train_info(args, model_dir_path, all_losses, all_dev_accuracy, epoch=epoch)
         save_model(model_dir_path, epoch, model)
 
 

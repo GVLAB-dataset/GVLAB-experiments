@@ -53,22 +53,32 @@ def save_model(model_dir_path, epoch, model):
 #     print(f'Dumping df {len(test_info)} to {out_p}, and {len(test_df)} to {out_p_test_df}')
 
 
-def dump_train_info(args, model_dir_path, all_losses, epoch):
+def dump_train_info(args, model_dir_path, all_losses, all_dev_accuracy, epoch):
     train_losses_mean = {i: np.mean(v) for i, v in enumerate(all_losses['train'])}
-    train_info = pd.concat([pd.Series(train_losses_mean, name='train loss')], axis=1)
+    dev_losses_mean = {i: np.mean(v) for i, v in enumerate(all_losses['dev'])}
+    dev_accuracy_mean = {i: np.mean(v) for i, v in enumerate(all_dev_accuracy)}
+    train_info = pd.concat(
+        [pd.Series(train_losses_mean, name='train loss'), pd.Series(dev_losses_mean, name='dev loss'),
+         pd.Series(dev_accuracy_mean, name='dev accuracy')], axis=1)
     out_p = os.path.join(model_dir_path, f'epoch_{epoch}')
     if args.result_suffix != '':
         out_p += "_" + args.result_suffix
     all_losses_out_p = out_p + '_all_losses.pickle'
     out_p += ".csv"
     train_info.to_csv(out_p)
-    all_losses_and_acc_d = {'all_losses': all_losses}
+    dev_loss_list = list(train_info['dev loss'].values)
+    dev_accuracy_list = list(train_info['dev accuracy'].values)
+    print(f"*** dev loss ***")
+    print(dev_loss_list)
+    print(f"*** dev accuracy ***")
+    print(dev_accuracy_list)
+    all_losses_and_acc_d = {'all_losses': all_losses, 'all_dev_accuracy': all_dev_accuracy}
     with open(all_losses_out_p, 'wb') as f:
         pickle.dump(all_losses_and_acc_d, f)
     print(f'Dumping losses {len(train_info)} to {all_losses_out_p}')
     print(train_info)
     print(f'Dumping df {len(train_info)} to {out_p}')
-    return list(train_info['train loss'].values)
+    return dev_accuracy_list
 
 
 
