@@ -18,6 +18,10 @@ class BackendModel:
         self.image_dim = self.load_and_encode_img('acid.jpg').shape[1]
         self.text_dim = self.encode_text('acid').shape[1]
 
+        print(f"Freezing backend model params")
+        for param in self.model.parameters():
+            param.requires_grad = False
+
     def load_and_encode_img(self, img):
         img_path = os.path.join(self.images_directory, img)
         img_rgb = Image.open(img_path).convert('RGB')

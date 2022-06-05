@@ -24,8 +24,8 @@ print(f"device: {device}")
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-lr', '--lr', help='learning rate', default=0.001, type=float)
-    # parser.add_argument('-bz', '--batch_size', default=128, type=int)
-    parser.add_argument('-bz', '--batch_size', default=32, type=int)
+    parser.add_argument('-bz', '--batch_size', default=128, type=int)
+    # parser.add_argument('-bz', '--batch_size', default=32, type=int)
     # parser.add_argument('-bz', '--batch_size', default=4, type=int)
     parser.add_argument('-ne', '--n_epochs', default=10, type=int)
     parser.add_argument('--dev_test_sample', default=0.1, type=int)
@@ -172,7 +172,7 @@ def test_epoch(model, dev_loader, epoch):
         y = label_associations.squeeze().to(device)
 
         if args.debug:
-            if batch_idx > 5:
+            if batch_idx > 2:
                 break
         # loss = loss_fn(out, y)
         accuracy, predictions, labels = calculate_accuracy_test(all_batch_scores, y, num_associations)
@@ -293,7 +293,7 @@ def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoc
         all_dev_accuracy.append(epoch_dev_accuracy)
 
         dev_accuracy_list = dump_train_info(args, model_dir_path, all_losses, epoch=epoch)
-        save_model(model_dir_path, epoch, model, dev_accuracy_list)
+        save_model(model_dir_path, epoch, model)
 
 
 def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
@@ -334,7 +334,7 @@ def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
             optimizer.step()
 
             if args.debug:
-                if batch_idx > 5:
+                if batch_idx > 2:
                     break
 
     return epoch_train_losses

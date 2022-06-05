@@ -21,7 +21,7 @@ def calculate_accuracy(out_prob, y):
     return accuracy, predictions, labels
 
 
-def save_model(model_dir_path, epoch, model, dev_accuracy_list):
+def save_model(model_dir_path, epoch, model):
     out_p = os.path.join(model_dir_path, f"epoch_{epoch}.pth")
     print(f"Saving model path to... {out_p}")
     torch.save(model.state_dict(), out_p)
