@@ -27,14 +27,15 @@ def get_args():
     parser.add_argument('-bz', '--batch_size', default=128, type=int)
     # parser.add_argument('-bz', '--batch_size', default=32, type=int)
     # parser.add_argument('-bz', '--batch_size', default=4, type=int)
-    parser.add_argument('-ne', '--n_epochs', default=10, type=int)
+    parser.add_argument('-ne', '--n_epochs', default=7, type=int)
     parser.add_argument('--dev_test_sample', default=0.1, type=int)
     parser.add_argument('-s', '--split', default='gvlab_swow_split')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
     parser.add_argument("--debug", action='store_const', default=False, const=True)
     parser.add_argument("--test_model", action='store_const', default=True, const=True)
     parser.add_argument("--test_only", action='store_const', default=False, const=True)
-    parser.add_argument('--load_epoch', default=1)
+    parser.add_argument('--load_epoch', default=0)
+    parser.add_argument('--num_experiments', default=5)
     parser.add_argument('--model_backend_type', default='ViT-B/32', help="CLIP backend type", required=False)
     parser.add_argument('--model_version', default='1.0.0', help="version", required=False)
     args = parser.parse_args()
@@ -99,7 +100,8 @@ def test(backend_model, baseline_model, data):
     assert os.path.exists(model_path)
     baseline_model.load_state_dict(torch.load(model_path))
     baseline_model = baseline_model.eval()
-    test_loop(args=args, model=baseline_model, test_loader=test_loader, test_df=data[TEST])
+    results_zeroshot_vs_trainable = test_loop(args=args, model=baseline_model, test_loader=test_loader, test_df=data[TEST])
+    return results_zeroshot_vs_trainable
 
 def test_loop(args, model, test_loader, test_df):
     """
@@ -124,7 +126,8 @@ def test_loop(args, model, test_loader, test_df):
     test_df['predictions'] = predictions
     test_df['labels'] = labels
 
-    dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df, epoch=args.load_epoch)
+    results_zeroshot_vs_trainable = dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df, epoch=args.load_epoch)
+    return results_zeroshot_vs_trainable
 
 
 def test_epoch(model, dev_loader, epoch):
@@ -150,7 +153,7 @@ def test_epoch(model, dev_loader, epoch):
     all_predictions = []
     all_labels = []
 
-    for batch_idx, batch_data in tqdm(enumerate(dev_loader), total=len(dev_loader), desc=f'Testing epoch {epoch}...'):
+    for batch_idx, batch_data in tqdm(enumerate(dev_loader), total=len(dev_loader), desc=f'Testing epoch {epoch}... (Experiment {args.experiment_idx})'):
 
         with torch.no_grad():
             all_batch_scores = []
@@ -213,12 +216,16 @@ def dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df,
     test_accuracy_mean = {i: np.mean(v) for i, v in enumerate(all_test_accuracy)}
     test_info = pd.concat(
         [pd.Series(test_losses_mean, name='test loss'), pd.Series(test_accuracy_mean, name='test accuracy')], axis=1)
+    trainable_test_accuracy = round(test_info.iloc[0]['test accuracy'] * 100 , 2)
     out_p = os.path.join(model_dir_path, f'epoch_{epoch}_test')
     if args.result_suffix != '':
         out_p += "_" + args.result_suffix
     all_losses_out_p = out_p + '_all_losses_test.pickle'
     out_p_test_df = out_p + "_test_df.csv"
     out_p += ".csv"
+    test_clip_zeroshot_jaccard = round(test_df['clip_vit_32_jaccard'].mean() * 100 , 2)
+    print(f"test_clip_zeroshot_jaccard (# {len(test_df)} items): {test_clip_zeroshot_jaccard}")
+    test_info['test_clip_zeroshot_jaccard'] = test_clip_zeroshot_jaccard
     test_info.to_csv(out_p)
     test_df.to_csv(out_p_test_df)
     all_losses_and_acc_d = {'all_losses': all_losses, 'all_test_accuracy': all_test_accuracy}
@@ -227,6 +234,8 @@ def dump_test_info(args, model_dir_path, all_losses, all_test_accuracy, test_df,
     print(f'Dumping losses {len(test_info)} to {all_losses_out_p}')
     print(test_info)
     print(f'Dumping df {len(test_info)} to {out_p}, and {len(test_df)} to {out_p_test_df}')
+    results_zeroshot_vs_trainable = {'zero-shot': test_clip_zeroshot_jaccard, 'trainable': trainable_test_accuracy}
+    return results_zeroshot_vs_trainable
 
 
 def main(args):
@@ -245,7 +254,9 @@ def main(args):
         else:
             train(backend_model, baseline_model, splits, loss_fn)
             args.test_model = True
-            test(backend_model, baseline_model, splits)
+            results_zeroshot_vs_trainable = test(backend_model, baseline_model, splits)
+            return results_zeroshot_vs_trainable
+    return f"Finished experiment {args.experiment_idx}"
 
 
 
@@ -287,7 +298,7 @@ def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoc
     all_losses = {TRAIN: [], DEV: []}
     all_dev_accuracy = []
 
-    for epoch in tqdm(range(n_epoch)):
+    for epoch in tqdm(range(n_epoch), desc=f'Training (Experiment {args.experiment_idx})'):
         epoch_train_losses = train_epoch(loss_fn, model, optimizer, train_loader, epoch)
         epoch_dev_losses, epoch_dev_accuracy, _, _ = test_epoch(model, dev_loader, epoch)
         all_losses[TRAIN].append(epoch_train_losses)
@@ -316,7 +327,7 @@ def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
     epoch_train_losses = []
 
     with tqdm(enumerate(train_loader), total=len(train_loader)) as epochs:
-        epochs.set_description(f'Training epoch {epoch}, split: {args.split}')
+        epochs.set_description(f'Training epoch {epoch}, split: {args.split} (Experiment {args.experiment_idx})')
 
         for batch_idx, batch_data in epochs:
 
@@ -343,4 +354,20 @@ def train_epoch(loss_fn, model, optimizer, train_loader, epoch):
 
 if __name__ == '__main__':
     args = get_args()
-    main(args)
+    all_experiment_results = []
+    for experiment_idx in range(args.num_experiments):
+        setattr(args, 'experiment_idx', experiment_idx)
+        if args.debug:
+            setattr(args, 'n_epochs', 1)
+        results_zeroshot_vs_trainable = main(args)
+        all_experiment_results.append(results_zeroshot_vs_trainable)
+        all_experiment_results_df = pd.DataFrame(all_experiment_results)
+        print(f"*** experiment_idx : {experiment_idx} ***")
+        print(all_experiment_results_df)
+    all_experiment_results_df = pd.DataFrame(all_experiment_results)
+    print(f"all_experiment_results_df:")
+    print(all_experiment_results_df)
+    print(f"MEAN")
+    print(all_experiment_results_df.mean())
+    print('STD')
+    print(all_experiment_results_df.std())

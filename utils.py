@@ -110,7 +110,9 @@ def get_gvlab_data(args):
             print(f"Total train size is {len(train)}")
 
         print(f"Reading test from {args.split}")
-        df = pd.read_csv(f'assets/gvlab_{args.split}.csv')
+        # df = pd.read_csv(f'assets/gvlab_{args.split}.csv')
+        df = pd.read_csv(f'assets/test_sets_with_zero_shot_predictions/gvlab_{args.split}_with_predictions.csv')
+        print(f"Split: {args.split}, read data with predictions, mean jaccard: {df['clip_vit_32_jaccard'].mean()}")
         df['candidates'] = df['candidates'].apply(json.loads)
         df['associations'] = df['associations'].apply(json.loads)
 
@@ -123,8 +125,10 @@ def get_gvlab_data(args):
         dev_unique_ids, test_unique_ids, train, train_unique_ids = get_train_without_testdev_images(
             all_test_dev_candidates, dev, test, train)
         print(f"train: {len(train)}, # {len(train_unique_ids)} unique IDs")
-        print(f"dev: {len(dev)}, # {len(dev_unique_ids)} unique IDs")
-        print(f"test: {len(test)}, # {len(test_unique_ids)} unique IDs")
+        # print(f"dev: {len(dev)}, # {len(dev_unique_ids)} unique IDs")
+        # print(f"test: {len(test)}, # {len(test_unique_ids)} unique IDs")
+        print(f"dev: {len(dev)}, # {len(dev_unique_ids)} unique IDs, Jaccard: {round(dev['clip_vit_32_jaccard'].mean() * 100 , 1)}")
+        print(f"test: {len(test)}, # {len(test_unique_ids)} unique IDs, Jaccard: {round(test['clip_vit_32_jaccard'].mean() * 100 , 1)}")
 
         splits = {'train': train, 'dev': dev, 'test': test}
     return splits
@@ -189,7 +193,8 @@ def get_experiment_dir(args):
     if not os.path.exists(TRAIN_RESULTS_PATH):
         os.makedirs(TRAIN_RESULTS_PATH)
 
-    model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type.replace('/','-')}_{args.model_version.replace('/', '-')}_{args.split}")
+    model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type.replace('/','-')}_{args.model_version.replace('/', '-')}_{args.split}_{args.experiment_idx}")
+    # model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type.replace('/','-')}_{args.model_version.replace('/', '-')}_{args.split}")
 
     if args.debug:
         model_dir_path += "_DEBUG"
