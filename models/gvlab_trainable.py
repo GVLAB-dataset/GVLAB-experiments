@@ -1,9 +1,6 @@
 import torch
 from torch import nn
 
-from models.gvlab_backend import BackendModel
-
-
 class BaselineModel(nn.Module):
 
     def __init__(self, backend_model):
@@ -20,7 +17,6 @@ class BaselineModel(nn.Module):
     def forward(self, input_image_vector, text_vector):
         concatenated = []
         for i in range(len(input_image_vector)):
-            # input_concat = torch.cat([input_image_vector[i], text_vector[i]])
             input_concat = torch.cat([input_image_vector[i], text_vector[i]], dim=1)
             concatenated.append(input_concat)
 
