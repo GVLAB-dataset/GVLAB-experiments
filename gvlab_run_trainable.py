@@ -14,7 +14,7 @@ from models.gvlab_trainable import BaselineModel
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
-from utils import save_model, dump_train_info, get_gvlab_data
+from utils import save_model, dump_train_info, get_gvlab_data, get_experiment_dir
 
 device_ids = [0, 1, 2, 3]
 
@@ -32,7 +32,8 @@ def get_args():
     parser.add_argument('-s', '--split', default='gvlab_swow_split')  # gvlab_swow_split, gvlab_game_split_5_6, gvlab_game_split_10_12
     parser.add_argument('-rs', '--result_suffix', default="", required=False, help='suffix to add to results name')
     parser.add_argument("--debug", action='store_const', default=False, const=True)
-    parser.add_argument("--test_model", action='store_const', default=False, const=True)
+    parser.add_argument("--test_model", action='store_const', default=True, const=True)
+    parser.add_argument("--test_only", action='store_const', default=False, const=True)
     parser.add_argument('--load_epoch', default=1)
     parser.add_argument('--model_backend_type', default='ViT-B/32', help="CLIP backend type", required=False)
     parser.add_argument('--model_version', default='1.0.0', help="version", required=False)
@@ -95,8 +96,8 @@ def test(backend_model, baseline_model, data):
     model_dir_path = get_experiment_dir(args)
     model_path = os.path.join(model_dir_path, f'epoch_{args.load_epoch}.pth')
     print(f"Loading model (epoch_{args.load_epoch}) from {model_path}")
-    # assert os.path.exists(model_path)
-    # baseline_model.load_state_dict(torch.load(model_path))
+    assert os.path.exists(model_path)
+    baseline_model.load_state_dict(torch.load(model_path))
     baseline_model = baseline_model.eval()
     test_loop(args=args, model=baseline_model, test_loader=test_loader, test_df=data[TEST])
 
@@ -177,7 +178,7 @@ def test_epoch(model, dev_loader, epoch):
         # loss = loss_fn(out, y)
         accuracy, predictions, labels = calculate_accuracy_test(all_batch_scores, y, num_associations)
         # epoch_dev_losses.append(loss.item())
-        epoch_dev_accuracy.append(accuracy)
+        epoch_dev_accuracy += accuracy
         all_predictions += predictions
         all_labels += labels
 
@@ -198,7 +199,7 @@ def calculate_accuracy_test(pred_batch, label_batch, num_associations_batch):
         real_label = label.numpy()[np.where(label.numpy() != -1)]
         labels_indices = np.where(real_label == 1)[0]
         union = set(top_k_preds_ind).union(set(labels_indices))
-        intersection = set(top_k_preds_ind).intersection(set(union))
+        intersection = set(top_k_preds_ind).intersection(set(labels_indices))
         jaccard = len(intersection) / len(union)
         batch_jaccard.append(jaccard)
         batch_preds.append(top_k_preds_ind)
@@ -234,30 +235,19 @@ def main(args):
     baseline_model = BaselineModel(backend_model).to(device)
     print(f"Checking baseline model cuda: {next(baseline_model.parameters()).is_cuda}")
 
-    loss_fn = torch.nn.BCEWithLogitsLoss()
-
-    if args.test_model is False:
-        train(backend_model, baseline_model, splits, loss_fn)
-    else:
-        train(backend_model, baseline_model, splits, loss_fn)
-        args.test_model = True
+    if args.test_only:
+        print(f'test_only - going to test')
         test(backend_model, baseline_model, splits)
+    else:
+        loss_fn = torch.nn.BCEWithLogitsLoss()
+        if args.test_model is False:
+            train(backend_model, baseline_model, splits, loss_fn)
+        else:
+            train(backend_model, baseline_model, splits, loss_fn)
+            args.test_model = True
+            test(backend_model, baseline_model, splits)
 
 
-def get_experiment_dir(args):
-    if not os.path.exists(MODEL_RESULTS_PATH):
-        os.makedirs(MODEL_RESULTS_PATH)
-    if not os.path.exists(TRAIN_RESULTS_PATH):
-        os.makedirs(TRAIN_RESULTS_PATH)
-
-    model_dir_path = os.path.join(TRAIN_RESULTS_PATH, f"model_backend_{args.model_backend_type.replace('/','-')}_{args.model_version.replace('/', '-')}_{args.split}")
-
-    if args.debug:
-        model_dir_path += "_DEBUG"
-    if not os.path.exists(model_dir_path):
-        os.mkdir(model_dir_path)
-    json.dump(args.__dict__, open(os.path.join(model_dir_path, 'args.json'), 'w'))
-    return model_dir_path
 
 def train(backend_model, baseline_model, splits, loss_fn):
     optimizer = torch.optim.Adam(baseline_model.parameters(), lr=args.lr)
@@ -265,11 +255,25 @@ def train(backend_model, baseline_model, splits, loss_fn):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size)
     dev_dataset = Loader(splits['dev'], backend_model, is_train=False)
     dev_loader = DataLoader(dev_dataset, batch_size=args.batch_size)
+    model_dir_path = get_experiment_dir(args)
+    print(f"model_dir_path: {model_dir_path}")
+    splits_path = os.path.join(model_dir_path, 'splits')
+    if not os.path.exists(splits_path):
+        os.mkdir(splits_path)
+    for split in splits:
+        if split == 'train':
+            train_df = pd.DataFrame(splits['train'])
+            print(f"Writing train df (# {len(train_df)} items)")
+            train_df.to_csv(os.path.join(splits_path, f"train.csv"))
+        else:
+            splits[split].to_csv(os.path.join(splits_path, f"{split}.csv"))
+    print(f"Wrote splits to {splits_path}")
+
     train_loop(args=args, model=baseline_model, optimizer=optimizer, train_loader=train_loader, dev_loader=dev_loader, loss_fn=loss_fn,
-               n_epoch=args.n_epochs)
+               n_epoch=args.n_epochs, model_dir_path=model_dir_path)
 
 
-def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoch):
+def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoch, model_dir_path):
     """
     Parameters
     ----------
@@ -282,8 +286,6 @@ def train_loop(args, model, optimizer, train_loader, dev_loader, loss_fn, n_epoc
     """
     all_losses = {TRAIN: [], DEV: []}
     all_dev_accuracy = []
-    model_dir_path = get_experiment_dir(args)
-    print(f"model_dir_path: {model_dir_path}")
 
     for epoch in tqdm(range(n_epoch)):
         epoch_train_losses = train_epoch(loss_fn, model, optimizer, train_loader, epoch)
